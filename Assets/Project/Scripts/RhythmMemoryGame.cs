@@ -1,7 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
+
 
 public class RhythmMemoryGame : MonoBehaviour
 {
@@ -12,12 +14,8 @@ public class RhythmMemoryGame : MonoBehaviour
     public Transform cardContainer;
     public Text statusText;
     public Button playButton;
-    public Sprite bgImage;
-    public Sprite greenCardImage;
-    public Sprite redCardImage;
 
-
-    private List<SpriteRenderer> cards;
+    private List<Button> cards;
     private List<int> targetIndices;
     private List<int> playerIndices;
     private int currentIndex;
@@ -25,6 +23,8 @@ public class RhythmMemoryGame : MonoBehaviour
     private bool playing;
     private bool revealing;
     private bool preRoll;
+    public Sprite bgImage; // Define this in your script to assign default image
+    private List<Text> cardNumbers;
 
     private void Start()
     {
@@ -33,7 +33,7 @@ public class RhythmMemoryGame : MonoBehaviour
 
     private void InitializeGame()
     {
-        cards = new List<SpriteRenderer>();
+        cards = new List<Button>();
         targetIndices = new List<int>();
         playerIndices = new List<int>();
         currentIndex = 0;
@@ -41,29 +41,29 @@ public class RhythmMemoryGame : MonoBehaviour
         playing = false;
         revealing = false;
         preRoll = false;
+        cardNumbers = new List<Text>();
+    for (int i = 0; i < numberOfCards; i++)
+    {
+        GameObject card = Instantiate(cardPrefab, cardContainer);
+        Button cardButton = card.GetComponent<Button>();
+        int index = i;
+        cardButton.onClick.AddListener(() => OnCardClick(index));
+        cards.Add(cardButton);
+        cards[i].image.sprite = bgImage;
 
-        for (int i = 0; i < numberOfCards; i++)
-        {
-            GameObject card = Instantiate(cardPrefab, cardContainer);
-            card.GetComponent<Button>().onClick.AddListener(() => OnCardClick(i));
-            cards.Add(card.GetComponent<SpriteRenderer>());
-            cards[i].sprite = bgImage;
-        }
+        Text cardNumber = card.GetComponentInChildren<Text>(true); // Get the Text component
+        cardNumber.gameObject.SetActive(false); // Hide the number initially
+        cardNumbers.Add(cardNumber); // Store the Text component
+    }
 
         for (int i = 0; i < cardsToReveal; i++)
         {
             targetIndices.Add(Random.Range(0, numberOfCards));
         }
 
-        foreach (int i in targetIndices)
-        {
-            cards[i].sprite = greenCardImage;
-        }
-
         statusText.text = $"Find these tiles: {string.Join(", ", targetIndices)}";
         playButton.onClick.AddListener(Play);
     }
-
 
     private void Play()
     {
@@ -73,46 +73,54 @@ public class RhythmMemoryGame : MonoBehaviour
             StartCoroutine(PreRoll());
         }
     }
-    
-    public void OnCardClick(int index)
+
+  public void OnCardClick(int index)
     {
         Debug.Log($"Card clicked: {index}");
         if (!playing && !revealing && index < cards.Count)
         {
+            playerIndices.Add(index);
+            if (targetIndices.Contains(index))
+            {
+                cards[index].image.color = Color.green;
+                int targetIndex = targetIndices.IndexOf(index);
+                cardNumbers[index].text = (targetIndex + 1).ToString(); // Set the order
+                cardNumbers[index].gameObject.SetActive(true); // Show the number
+            }
+            else
+            {
+                cards[index].image.color = Color.red;
+            }
             StartCoroutine(RevealCard(index));
         }
     }
+
+
 
     private IEnumerator RevealCard(int index)
     {
         revealing = true;
 
-        if (targetIndices.Contains(index))
-        {
-            cards[index].sprite = greenCardImage;
-        }
-        else
-        {
-            cards[index].sprite = redCardImage;
-        }
+        yield return new WaitForSeconds(0.5f);
 
-        yield return new WaitForSeconds(1f);
+        cards[index].image.color = Color.white;
+        cardNumbers[index].gameObject.SetActive(false); // Hide the number
 
-        cards[index].sprite = bgImage;
         revealing = false;
     }
 
-   private void CheckMatch()
+
+    private void CheckMatch()
     {
         if (currentIndex < cardsToReveal)
         {
             if (playerIndices[currentIndex] == targetIndices[currentIndex])
             {
-                cards[playerIndices[currentIndex]].sprite = greenCardImage;
+                cards[playerIndices[currentIndex]].image.color = Color.green;
             }
             else
             {
-                cards[playerIndices[currentIndex]].sprite = redCardImage;
+                cards[playerIndices[currentIndex]].image.color = Color.red;
                 LoseLife();
             }
 
@@ -132,6 +140,7 @@ public class RhythmMemoryGame : MonoBehaviour
             }
         }
     }
+
 
    private IEnumerator PreRoll()
     {
@@ -170,7 +179,14 @@ public class RhythmMemoryGame : MonoBehaviour
             targetIndices.Add(Random.Range(0, numberOfCards));
         }
 
-        statusText.text = $"Find these tiles: {string.Join(", ", targetIndices)}";
+        // Reset card numbers and their visibility
+        for (int i = 0; i < numberOfCards; i++)
+        {
+            cardNumbers[i].text = "";
+            cardNumbers[i].gameObject.SetActive(false);
+        }
+
+        statusText.text = $"Find these tiles: {string.Join(", ", targetIndices.Select(x => x + 1))}";
     }
 
 
