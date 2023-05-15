@@ -14,6 +14,7 @@ public class RhythmMemoryGame : MonoBehaviour
     public Transform cardContainer;
     public Text statusText;
     public Button playButton;
+    public AudioClip[] tileSounds;
 
     private List<Button> cards;
     private List<int> targetIndices;
@@ -25,9 +26,11 @@ public class RhythmMemoryGame : MonoBehaviour
     private bool preRoll;
     public Sprite bgImage; // Define this in your script to assign default image
     private List<Text> cardNumbers;
+    private AudioSource audioSource;
 
     private void Start()
     {
+        audioSource = GetComponent<AudioSource>();
         InitializeGame();
     }
 
@@ -86,6 +89,12 @@ public class RhythmMemoryGame : MonoBehaviour
                 int targetIndex = targetIndices.IndexOf(index);
                 cardNumbers[index].text = (targetIndex + 1).ToString(); // Set the order
                 cardNumbers[index].gameObject.SetActive(true); // Show the number
+
+                // Play the corresponding sound
+                if(targetIndex < tileSounds.Length)
+                {
+                    audioSource.PlayOneShot(tileSounds[targetIndex]);
+                }
             }
             else
             {
@@ -94,6 +103,7 @@ public class RhythmMemoryGame : MonoBehaviour
             StartCoroutine(RevealCard(index));
         }
     }
+
 
 
 
