@@ -36,15 +36,25 @@ public class RhythmMemoryGame : MonoBehaviour
 
     private void InitializeGame()
     {
-        cards = new List<Button>();
-        targetIndices = new List<int>();
-        playerIndices = new List<int>();
-        currentIndex = 0;
-        lives = 3;
-        playing = false;
-        revealing = false;
-        preRoll = false;
-        cardNumbers = new List<Text>();
+
+    // Destroy old cards
+    if (cards != null)
+    {
+        foreach (var card in cards)
+        {
+            Destroy(card.gameObject);
+        }
+    }
+
+    cards = new List<Button>();
+    HashSet<int> uniqueIndices = new HashSet<int>();
+    playerIndices = new List<int>();
+    currentIndex = 0;
+    lives = 3;
+    playing = false;
+    revealing = false;
+    preRoll = false;
+    cardNumbers = new List<Text>();
     for (int i = 0; i < numberOfCards; i++)
     {
         GameObject card = Instantiate(cardPrefab, cardContainer);
@@ -59,50 +69,83 @@ public class RhythmMemoryGame : MonoBehaviour
         cardNumbers.Add(cardNumber); // Store the Text component
     }
 
-        for (int i = 0; i < cardsToReveal; i++)
-        {
-            targetIndices.Add(Random.Range(0, numberOfCards));
-        }
-
-        statusText.text = $"Find these tiles: {string.Join(", ", targetIndices)}";
-        playButton.onClick.AddListener(Play);
+    while (uniqueIndices.Count < cardsToReveal)
+    {
+        uniqueIndices.Add(Random.Range(0, numberOfCards));
     }
 
-    private void Play()
+    targetIndices = uniqueIndices.ToList();
+
+    statusText.text = $"Find these tiles: {string.Join(", ", targetIndices)}";
+    playButton.onClick.AddListener(Play);
+    }
+
+    public void Play()
     {
         if (!playing)
         {
             playing = true;
-            StartCoroutine(PreRoll());
+            currentIndex = 0; // Reset currentIndex to 0 when starting the game
+            statusText.text = "Now, repeat the sequence!";
         }
     }
 
-  public void OnCardClick(int index)
+
+    public void OnCardClick(int index)
     {
         Debug.Log($"Card clicked: {index}");
-        if (!playing && !revealing && index < cards.Count)
+        if (!revealing && index < cards.Count)
         {
             playerIndices.Add(index);
             if (targetIndices.Contains(index))
             {
-                cards[index].image.color = Color.green;
                 int targetIndex = targetIndices.IndexOf(index);
-                cardNumbers[index].text = (targetIndex + 1).ToString(); // Set the order
-                cardNumbers[index].gameObject.SetActive(true); // Show the number
 
                 // Play the corresponding sound
                 if(targetIndex < tileSounds.Length)
                 {
                     audioSource.PlayOneShot(tileSounds[targetIndex]);
                 }
+
+                if (!playing) // Preroll phase
+                {
+                    cards[index].image.color = Color.green;
+                    cardNumbers[index].text = (targetIndex + 1).ToString(); // Set the order
+                    cardNumbers[index].gameObject.SetActive(true); // Show the number
+                    StartCoroutine(RevealCard(index));
+                }
+                else if (playing && targetIndex == currentIndex) // Play phase and correct sequence
+                {
+                    cards[index].image.color = Color.green;
+                    cardNumbers[index].text = (targetIndex + 1).ToString(); // Set the order
+                    cardNumbers[index].gameObject.SetActive(true); // Show the number
+                    StartCoroutine(DelayedRevealCard(index));
+                    CheckMatch();
+                }
+                else if (playing) // Play phase and wrong order
+                {
+                    cards[index].image.color = Color.red;
+                    StartCoroutine(DelayedRevealCard(index));
+                    LoseLife();
+                    ResetPlayPhase();
+                }
             }
             else
             {
+                // An incorrect tile has been clicked during the play phase, handle it here
                 cards[index].image.color = Color.red;
+                StartCoroutine(DelayedRevealCard(index)); // Also reveal card when clicked on a wrong tile in play phase
+                if (playing) // Play phase and wrong tile
+                {
+                    LoseLife();
+                    StartCoroutine(ResetPlayPhaseWithDelay()); // Added a delayed reset
+                }
             }
-            StartCoroutine(RevealCard(index));
         }
     }
+
+
+
 
 
 
@@ -120,35 +163,44 @@ public class RhythmMemoryGame : MonoBehaviour
     }
 
 
-    private void CheckMatch()
+        private void CheckMatch()
     {
-        if (currentIndex < cardsToReveal)
-        {
-            if (playerIndices[currentIndex] == targetIndices[currentIndex])
-            {
-                cards[playerIndices[currentIndex]].image.color = Color.green;
-            }
-            else
-            {
-                cards[playerIndices[currentIndex]].image.color = Color.red;
-                LoseLife();
-            }
+        int playerIndex = playerIndices.Last(); // Get the last clicked card index
 
-            currentIndex++;
+        if (playerIndex != targetIndices[currentIndex])
+        {
+            cards[playerIndex].image.color = Color.red;
+            LoseLife();
+            ResetPlayPhase();
+            return;
         }
 
+        currentIndex++;
         if (currentIndex == cardsToReveal)
         {
-            if (lives > 0)
-            {
-                NextLevel();
-            }
-            else
-            {
-                // You lose the game
-                statusText.text = "Game Over";
-            }
+            // You win the game
+            statusText.text = "You Win!";
+            // To proceed to the next level uncomment the line below
+            // NextLevel();
         }
+    }
+
+    private void ResetPlayPhase()
+    {
+        playerIndices.Clear();
+        currentIndex = 0;
+        for (int i = 0; i < cards.Count; i++)
+        {
+            cards[i].image.color = Color.white;
+            cardNumbers[i].gameObject.SetActive(false); // Hide the number
+        }
+        statusText.text = "Try again!";
+    }
+
+    private IEnumerator DelayedRevealCard(int index)
+    {
+        yield return new WaitForSeconds(1f);
+        StartCoroutine(RevealCard(index));
     }
 
 
@@ -173,8 +225,17 @@ public class RhythmMemoryGame : MonoBehaviour
         while (currentIndex < cardsToReveal)
         {
             yield return new WaitForSeconds(beatInterval);
-            CheckMatch();
+            int targetIndex = targetIndices[currentIndex];
+            cards[targetIndex].image.color = Color.green;
+            cardNumbers[targetIndex].text = (currentIndex + 1).ToString(); // Set the order
+            cardNumbers[targetIndex].gameObject.SetActive(true); // Show the number
+            StartCoroutine(RevealCard(targetIndex));
+            currentIndex++;
         }
+
+        currentIndex = 0;
+        statusText.text = "Now, repeat the sequence!";
+
     }
 
 
@@ -199,11 +260,17 @@ public class RhythmMemoryGame : MonoBehaviour
         statusText.text = $"Find these tiles: {string.Join(", ", targetIndices.Select(x => x + 1))}";
     }
 
-
     private void LoseLife()
     {
         lives--;
         statusText.text = $"Lives left: {lives}";
+        if (lives <= 0)
+        {
+            // Game Over - Restart game or load game over scene
+            Debug.Log("Game Over");
+            InitializeGame(); // Resets the game
+            StartCoroutine(PreRoll()); // Initiate preroll phase after Game Over
+        }
     }
 
     private void Shuffle(Sprite[] array)
@@ -216,5 +283,10 @@ public class RhythmMemoryGame : MonoBehaviour
             array[randomIndex] = temp;
         }
     }
-
+        
+    private IEnumerator ResetPlayPhaseWithDelay()
+    {
+        yield return new WaitForSeconds(1f);
+        ResetPlayPhase();
+    }
 }
